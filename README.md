@@ -15,6 +15,6 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 ## Run everything
 
 ```bash
-pip install pytest mypy
+pip install -r requirements-dev.txt
 pytest
 ```
