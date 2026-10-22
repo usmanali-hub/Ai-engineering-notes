@@ -11,6 +11,7 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 | Python | [Decorators: timing and retry](python/decorators-timing-retry) | A timing decorator and a retry decorator with exponential backoff |
 | Python | [Streaming chunks](python/streaming-chunks) | Generators and context managers for processing large inputs lazily |
 | Python | [Strict typing](python/strict-typing) | Common mypy strict errors and how to fix them |
+| NumPy | [Vectorization benchmark](python/vectorization-benchmark) | Python loops vs NumPy, with measured speedups |
 
 ## Run everything
 
