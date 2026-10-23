@@ -12,6 +12,7 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 | Python | [Streaming chunks](python/streaming-chunks) | Generators and context managers for processing large inputs lazily |
 | Python | [Strict typing](python/strict-typing) | Common mypy strict errors and how to fix them |
 | NumPy | [Vectorization benchmark](python/vectorization-benchmark) | Python loops vs NumPy, with measured speedups |
+| pandas | [Clean a messy CSV](python/pandas-clean-csv) | Header, text, currency, date and duplicate cleanup in one short chain |
 
 ## Run everything
 
