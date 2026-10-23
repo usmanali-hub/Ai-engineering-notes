@@ -57,7 +57,7 @@ def run(n: int = 1_000_000, window: int = 20, seed: int = 0) -> list[tuple[str, 
     cases = [
         ("sum of squares", lambda: sum_of_squares_loop(lst), lambda: sum_of_squares_vec(arr)),
         ("z-score", lambda: zscore_loop(lst), lambda: zscore_vec(arr)),
-        ("rolling mean (w=%d)" % window, lambda: rolling_mean_loop(lst, window), lambda: rolling_mean_vec(arr, window)),
+        (f"rolling mean (w={window})", lambda: rolling_mean_loop(lst, window), lambda: rolling_mean_vec(arr, window)),
     ]
     return [(name, best_time(loop), best_time(vec)) for name, loop, vec in cases]
 
