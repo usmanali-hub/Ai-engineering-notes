@@ -14,6 +14,7 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 | NumPy | [Vectorization benchmark](python/vectorization-benchmark) | Python loops vs NumPy, with measured speedups |
 | pandas | [Clean a messy CSV](python/pandas-clean-csv) | Header, text, currency, date and duplicate cleanup in one short chain |
 | pandas | [Time-series resampling](python/timeseries-resampling) | Tick prices to OHLC bars, log returns and rolling volatility |
+| NumPy | [Outlier detection](python/outlier-detection) | z-score vs IQR vs median/MAD, and why z-scores can mask outliers |
 
 ## Run everything
 
