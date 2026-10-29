@@ -13,6 +13,7 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 | Python | [Strict typing](python/strict-typing) | Common mypy strict errors and how to fix them |
 | NumPy | [Vectorization benchmark](python/vectorization-benchmark) | Python loops vs NumPy, with measured speedups |
 | SQL | [Window function cheat sheet](sql/window-functions) | Eight runnable window-function queries with hand-checked results |
+| SQL | [Index vs no index](sql/index-explain) | EXPLAIN QUERY PLAN before and after an index: scan vs search, ~200x faster lookups, when an index cannot help, and the write cost |
 | pandas | [Clean a messy CSV](python/pandas-clean-csv) | Header, text, currency, date and duplicate cleanup in one short chain |
 | pandas | [Time-series resampling](python/timeseries-resampling) | Tick prices to OHLC bars, log returns and rolling volatility |
 | Visualization | [Matplotlib chart set](python/matplotlib-chart-set) | Line, bar and histogram helpers with one consistent, honest style |
