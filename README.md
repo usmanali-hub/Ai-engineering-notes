@@ -18,6 +18,7 @@ code, tests and a README with what I tried, what I learned, and how to run it.
 | SQL | [Parameterized queries](sql/parameterized-queries) | Placeholders vs string formatting: injection and UNION-leak demos, IN lists, LIKE wildcard escaping, whitelisted sort columns, rollback on failure |
 | ML | [Bias-variance, measured](ml/bias-variance) | Bias², variance and noise² estimated from 300 resampled training sets, checked against directly measured test error; with the plot |
 | ML | [Train/test leakage](ml/leakage) | Five leaks measured next to their fixes: selection before CV turns noise into 88% accuracy, a column that follows the outcome, the same customer on both sides, and a scaler fitted on all rows (barely matters) |
+| ML | [Feature scaling](ml/scaling) | KNN, SVM, logistic regression and a forest compared under four scalers on real data: scaling moves KNN and SVM from about 0.7 to 0.97 on wine, trees do not care, and scaling does not rescue outliers |
 | pandas | [Clean a messy CSV](python/pandas-clean-csv) | Header, text, currency, date and duplicate cleanup in one short chain |
 | pandas | [Time-series resampling](python/timeseries-resampling) | Tick prices to OHLC bars, log returns and rolling volatility |
 | Visualization | [Matplotlib chart set](python/matplotlib-chart-set) | Line, bar and histogram helpers with one consistent, honest style |
