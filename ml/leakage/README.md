@@ -9,6 +9,7 @@ version and the fixed one side by side (`python leakage.py`, about five seconds)
 | **Feature selection before cross-validation** | Keep the 20 features most correlated with the labels, *then* cross-validate. Data: 100 rows, 5,000 pure-noise features, coin-flip labels (truth: 50%) | 87.7% | 50.5% | Put selection inside a `Pipeline`, so every fold picks features from its own training rows |
 | **A column that follows the outcome** | `cancellation_ticket` is filed *because* a customer cancels; it does not exist when a retention model would run | AUC 0.977 | AUC 0.667 | Drop columns that are consequences of the target. A holdout split cannot catch this: the column is in the test rows too |
 | **Same customer in train and test** | Several rows per customer; a random forest memorises each customer's fingerprint. Labels are random per customer (truth: 50%) | 98.8% | 51.1% | `GroupKFold`: split by customer, never by row |
+| **Selection on real data** | Same selection mistake, but on real breast-cancer rows with 3,000 junk columns added (60 rows) | 93.0% | 93.0% | Same pipeline fix. Here it changes nothing, because the real columns are strong enough that selection finds them either way |
 | **Scaler fitted on all rows** | Standardise before splitting (breast-cancer data, SVC) | 97.54% | 97.71% | `make_pipeline(StandardScaler(), model)` |
 
 ## What to take from it
@@ -27,7 +28,7 @@ and that results are reproducible for a seed.
 
 ## Limits
 
-The data in three of the four cases is synthetic, built so the truth is known (50% for random labels). That
-is what makes the leak measurable, but real datasets rarely offer a known ground truth, so there the defence
+Three of the five cases use synthetic data, built so the truth is known (50% for random labels). That
+is what makes the leak measurable, and the two real-data cases (scaler, selection) show the leak is small when there is strong real signal, but real datasets rarely offer a known ground truth, so there the defence
 has to be process: split first, fit every transformation on training rows only, and split by the entity
 (customer, patient, device) rather than by row.

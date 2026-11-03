@@ -126,14 +126,37 @@ def scaler_leakage(seed: int = 0) -> dict[str, float]:
     return {"leaky": float(leaky), "honest": float(honest)}
 
 
+def real_data_selection_leakage(n: int = 60, noise_features: int = 3000, k: int = 10, repeats: int = 10, seed: int = 0) -> dict[str, float]:
+    """Selection leakage on REAL data: breast-cancer rows with thousands of junk columns added.
+
+    Unlike the pure-noise case, the real columns carry genuine signal, so the honest model is good and
+    the leaky selection has little left to inflate. Included as a check on the synthetic demos: the size
+    of a leak depends on how much real signal there is to find.
+    """
+    X, y = load_breast_cancer(return_X_y=True)
+    rng = np.random.default_rng(seed)
+    leaky, honest = [], []
+    for r in range(repeats):
+        idx = rng.choice(len(y), n, replace=False)
+        data = np.hstack([X[idx], rng.normal(size=(n, noise_features))])
+        labels = y[idx]
+        folds = StratifiedKFold(5, shuffle=True, random_state=r)
+        chosen = SelectKBest(f_classif, k=k).fit_transform(data, labels)
+        leaky.append(cross_val_score(make_pipeline(StandardScaler(), LogisticRegression(max_iter=2000)), chosen, labels, cv=folds).mean())
+        pipe = make_pipeline(SelectKBest(f_classif, k=k), StandardScaler(), LogisticRegression(max_iter=2000))
+        honest.append(cross_val_score(pipe, data, labels, cv=folds).mean())
+    return {"leaky": float(np.mean(leaky)), "honest": float(np.mean(honest))}
+
+
 def summary() -> str:
-    s, t, g, c = selection_leakage(), target_leakage(), group_leakage(), scaler_leakage()
+    s, t, g, c, rd = selection_leakage(), target_leakage(), group_leakage(), scaler_leakage(), real_data_selection_leakage()
     return "\n".join(
         [
             f"feature selection before CV (noise data, truth 50%): leaky {s['leaky']:.1%}  honest {s['honest']:.1%}",
             f"column that follows the outcome (AUC):               leaky {t['leaky']:.3f}  honest {t['honest']:.3f}",
             f"same customer in train and test (truth 50%):         leaky {g['leaky']:.1%}  honest {g['honest']:.1%}",
             f"scaler fitted on all rows (breast cancer, accuracy): leaky {c['leaky']:.4f} honest {c['honest']:.4f}",
+            f"selection leak on real data + junk columns (accuracy): leaky {rd['leaky']:.1%}  honest {rd['honest']:.1%}",
         ]
     )
 

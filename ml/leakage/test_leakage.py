@@ -66,10 +66,16 @@ def test_scaler_leakage_is_real_but_tiny_here():
     assert r["honest"] > 0.95  # the model is genuinely good; the point is the leak barely moves it
 
 
+def test_on_real_data_with_strong_signal_selection_leakage_is_small():
+    r = lk.real_data_selection_leakage(repeats=4)
+    assert r["honest"] > 0.85  # real signal survives the junk columns
+    assert abs(r["leaky"] - r["honest"]) < 0.05
+
+
 def test_results_are_reproducible_for_a_seed():
     assert lk.group_leakage(seed=3) == lk.group_leakage(seed=3)
     assert lk.target_leakage(seed=3) == lk.target_leakage(seed=3)
 
 
 def test_summary_reports_all_four_cases():
-    assert len(lk.summary().splitlines()) == 4
+    assert len(lk.summary().splitlines()) == 5
