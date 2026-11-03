@@ -54,14 +54,17 @@ def with_scaler(model: BaseEstimator, scaler: str) -> BaseEstimator:
     return make_pipeline(step, model)
 
 
-def compare(X: np.ndarray, y: np.ndarray, repeats: int = 3, seed: int = 0) -> dict[str, dict[str, float]]:
-    """Mean cross-validated accuracy for every (model, scaler) pair, on identical folds."""
+def compare(
+    X: np.ndarray, y: np.ndarray, repeats: int = 3, seed: int = 0, only: tuple[str, ...] | None = None
+) -> dict[str, dict[str, float]]:
+    """Mean cross-validated accuracy for every (model, scaler) pair, on identical folds. ``only`` limits the models."""
     folds = RepeatedStratifiedKFold(n_splits=5, n_repeats=repeats, random_state=seed)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ConvergenceWarning)  # unscaled logistic regression often stops at its limit
         return {
             name: {s: float(cross_val_score(with_scaler(est, s), X, y, cv=folds).mean()) for s in SCALERS}
             for name, est in models().items()
+            if only is None or name in only
         }
 
 
@@ -106,20 +109,55 @@ def with_outliers(X: np.ndarray, fraction: float = 0.05, factor: float = 20.0, s
     return out
 
 
-def summary(repeats: int = 3) -> str:
+OUTLIER_PATTERNS: dict[str, tuple[tuple[int, ...], float, float]] = {
+    "5% of all values x20": (tuple(range(30)), 0.05, 20.0),
+    "1% of all values x20": (tuple(range(30)), 0.01, 20.0),
+    "3% of rows in 10 columns x50": (tuple(range(10)), 0.03, 50.0),
+    "3% of rows in 5 columns x100": (tuple(range(5)), 0.03, 100.0),
+}
+
+
+def corrupt(X: np.ndarray, columns: tuple[int, ...], fraction: float, factor: float, seed: int = 0) -> np.ndarray:
+    """Multiply a random ``fraction`` of the values in the given columns by ``factor``."""
+    rng = np.random.default_rng(seed)
+    out = X.copy()
+    for c in columns:
+        hit = rng.random(len(X)) < fraction
+        out[hit, c] *= factor
+    return out
+
+
+def outlier_sweep(seeds: int = 3, repeats: int = 1) -> dict[str, dict[str, dict[str, float]]]:
+    """KNN and SVM accuracy under several corruption patterns, averaged over ``seeds`` corrupted copies.
+
+    One pattern can flatter one scaler by accident, so the claim "scaling does not fix outliers" is tested across several.
+    """
+    X, y = load("breast_cancer")
+    out: dict[str, dict[str, dict[str, float]]] = {}
+    for name, (columns, fraction, factor) in OUTLIER_PATTERNS.items():
+        runs = [compare(corrupt(X, columns, fraction, factor, seed), y, repeats, seed, only=("knn", "svm_rbf")) for seed in range(seeds)]
+        out[name] = {m: {s: float(np.mean([r[m][s] for r in runs])) for s in SCALERS} for m in ("knn", "svm_rbf")}
+    return out
+
+
+def summary(repeats: int = 3, only: tuple[str, ...] | None = None) -> str:
     lines = []
     for name in ("breast_cancer", "wine"):
         X, y = load(name)
         top, share = distance_share(X)
         lines.append(f"\n{name}: {X.shape[0]} rows, {X.shape[1]} features; feature {top} supplies {share:.1%} of squared distance (equal share would be {1 / X.shape[1]:.1%})")
         lines.append(f"{'model':<10}" + "".join(f"{s:>10}" for s in SCALERS))
-        for model, row in compare(X, y, repeats).items():
+        for model, row in compare(X, y, repeats, only=only).items():
             lines.append(f"{model:<10}" + "".join(f"{row[s]:>10.3f}" for s in SCALERS))
     X, y = load("breast_cancer")
     lines.append("\nbreast_cancer with 5% of values multiplied by 20 (outliers):")
     lines.append(f"{'model':<10}" + "".join(f"{s:>10}" for s in SCALERS))
-    for model, row in compare(with_outliers(X), y, repeats).items():
+    for model, row in compare(with_outliers(X), y, repeats, only=only).items():
         lines.append(f"{model:<10}" + "".join(f"{row[s]:>10.3f}" for s in SCALERS))
+    lines.append("\noutlier sweep (breast_cancer, mean over 3 corrupted copies):")
+    for pattern, by_model in outlier_sweep(repeats=1).items():
+        for model, row in by_model.items():
+            lines.append(f"{pattern:<30}{model:<9}" + "".join(f"{row[s]:>8.3f}" for s in SCALERS))
     t = scale_trap()
     lines.append(f"\nscale trap (2 informative + 1 noise feature in thousands): KNN unscaled {t['unscaled']:.3f}, standardised {t['standard']:.3f}; noise supplies {t['noise_share_of_distance']:.1%} of distance")
     return "\n".join(lines)

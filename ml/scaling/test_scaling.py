@@ -18,12 +18,12 @@ def wine():
 
 @pytest.fixture(scope="module")
 def cancer_results(cancer):
-    return sc.compare(*cancer, repeats=1)
+    return sc.compare(*cancer, repeats=1, only=("knn", "svm_rbf", "forest"))
 
 
 @pytest.fixture(scope="module")
 def wine_results(wine):
-    return sc.compare(*wine, repeats=1)
+    return sc.compare(*wine, repeats=1, only=("knn", "svm_rbf", "forest"))
 
 
 def test_one_large_scale_feature_supplies_most_of_the_distance(cancer, wine):
@@ -92,7 +92,7 @@ def test_scaling_is_fitted_inside_each_fold_not_on_all_rows(cancer):
 def test_scaling_does_not_remove_outliers(cancer):
     """Corrupt 5% of values: every scaler leaves KNN worse off than the unscaled model on this data."""
     X, y = cancer
-    results = sc.compare(sc.with_outliers(X), y, repeats=1)
+    results = sc.compare(sc.with_outliers(X), y, repeats=1, only=("knn", "forest"))
     for s in ("standard", "minmax", "robust"):
         assert results["knn"][s] < results["knn"]["none"] - 0.05
     assert results["forest"]["none"] > 0.9  # the tree model barely notices
@@ -107,5 +107,38 @@ def test_outlier_injection_is_reproducible_and_leaves_the_input_alone(cancer):
 
 
 def test_summary_mentions_every_dataset_and_the_trap():
-    text = sc.summary(repeats=1)
+    text = sc.summary(repeats=1, only=("knn",))
     assert "breast_cancer" in text and "wine" in text and "scale trap" in text and "outliers" in text
+
+
+@pytest.fixture(scope="module")
+def sweep():
+    return sc.outlier_sweep()
+
+
+def test_widespread_corruption_hurts_every_scaler(sweep):
+    for pattern in ("5% of all values x20", "1% of all values x20"):
+        for model in ("knn", "svm_rbf"):
+            row = sweep[pattern][model]
+            assert all(row[s] < row["none"] for s in ("standard", "minmax", "robust"))
+    assert all(sweep["5% of all values x20"]["knn"][s] < 0.8 for s in ("standard", "minmax", "robust"))
+
+
+def test_concentrated_corruption_lets_minmax_and_standard_help_svm_but_robust_collapses(sweep):
+    for pattern in ("3% of rows in 10 columns x50", "3% of rows in 5 columns x100"):
+        row = sweep[pattern]["svm_rbf"]
+        assert row["minmax"] > row["none"] + 0.05 and row["standard"] > row["none"] + 0.05
+        assert row["robust"] < row["minmax"] - 0.1  # a robust scale estimate does not shrink the outliers themselves
+
+
+def test_no_scaler_wins_every_pattern(sweep):
+    winners = {max(sweep[p]["knn"], key=sweep[p]["knn"].get) for p in sweep}  # type: ignore[arg-type]
+    assert len(winners) >= 2
+
+
+def test_corrupt_touches_only_the_chosen_columns_and_is_reproducible(cancer):
+    X, _ = cancer
+    out = sc.corrupt(X, (0, 1), 0.1, 10.0, seed=3)
+    assert np.array_equal(out[:, 2:], X[:, 2:])
+    assert np.array_equal(out, sc.corrupt(X, (0, 1), 0.1, 10.0, seed=3))
+    assert 0.05 < (out[:, 0] != X[:, 0]).mean() < 0.15
