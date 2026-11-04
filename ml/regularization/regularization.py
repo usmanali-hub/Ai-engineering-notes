@@ -16,7 +16,14 @@ import matplotlib
 import numpy as np
 from sklearn.datasets import load_diabetes
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.linear_model import Lasso, LassoCV, LinearRegression, RidgeCV, lasso_path
+from sklearn.linear_model import (
+    ElasticNetCV,
+    Lasso,
+    LassoCV,
+    LinearRegression,
+    RidgeCV,
+    lasso_path,
+)
 from sklearn.model_selection import RepeatedKFold, cross_val_score
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -25,6 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ALPHAS = np.logspace(-3, 3, 60)
+GROUP = 5  # columns per correlated group
 
 
 @dataclass
@@ -35,11 +43,21 @@ class World:
 
 
 def make_world(kind: str, n: int = 100, p: int = 50, noise: float = 3.0, seed: int = 0) -> World:
-    """``sparse``: 5 of p coefficients are large and the rest exactly zero. ``dense``: all p are small and non-zero."""
+    """``sparse``: 5 of p coefficients are large and the rest exactly zero. ``dense``: all p are small and non-zero.
+
+    ``correlated``: like sparse, but the columns come in groups of five that move together (correlation about 0.9),
+    and each real feature has four near-copies that are not real. Lasso cannot tell a feature from its copies.
+    """
     rng = np.random.default_rng(seed)
     X = rng.normal(size=(n, p))
+    if kind == "correlated":
+        groups = p // GROUP
+        factor = rng.normal(size=(n, groups))
+        X = np.sqrt(0.9) * np.repeat(factor, GROUP, axis=1) + np.sqrt(0.1) * X
     coef = np.zeros(p)
-    if kind == "sparse":
+    if kind == "correlated":
+        coef[::GROUP][:5] = [4.0, -3.0, 2.5, -2.0, 1.5]  # the first column of each of the first five groups
+    elif kind == "sparse":
         coef[:5] = [4.0, -3.0, 2.5, -2.0, 1.5]
     elif kind == "dense":
         coef[:] = rng.normal(0, 0.7, p)
@@ -48,12 +66,17 @@ def make_world(kind: str, n: int = 100, p: int = 50, noise: float = 3.0, seed: i
     return World(X, X @ coef + rng.normal(0, noise, n), coef)
 
 
-def models() -> dict[str, Pipeline]:
-    return {
+def models(elastic_net: bool = False) -> dict[str, Pipeline]:
+    out = {
         "ols": make_pipeline(StandardScaler(), LinearRegression()),
         "ridge": make_pipeline(StandardScaler(), RidgeCV(alphas=ALPHAS)),
         "lasso": make_pipeline(StandardScaler(), LassoCV(alphas=ALPHAS, cv=5, max_iter=20000, random_state=0)),
     }
+    if elastic_net:  # a mix of the two penalties, designed for groups of correlated features
+        out["elastic_net"] = make_pipeline(
+            StandardScaler(), ElasticNetCV(l1_ratio=[0.1, 0.5, 0.9], alphas=ALPHAS, cv=5, max_iter=20000, random_state=0)
+        )
+    return out
 
 
 def original_scale_coef(pipe: Pipeline) -> np.ndarray:
@@ -68,15 +91,16 @@ def experiment(kind: str, repeats: int = 30, n: int = 100, p: int = 50, noise: f
     Test error is measured on 5,000 fresh rows from the same world, as a multiple of the irreducible noise variance
     (1.0 would be a perfect model).
     """
-    sums: dict[str, dict[str, list[float]]] = {m: {"test_error": [], "coef_error": []} for m in models()}
-    found, wrong, zeros_kept = [], [], []
+    use_enet = kind == "correlated"
+    sums: dict[str, dict[str, list[float]]] = {m: {"test_error": [], "coef_error": []} for m in models(use_enet)}
+    found, wrong, zeros_kept, group_found, clean, decoys_kept = [], [], [], [], [], []
     for r in range(repeats):
         w = make_world(kind, n, p, noise, seed + r)
         fresh = make_world(kind, 5000, p, noise, seed + 10_000 + r)
         fresh_y = fresh.X @ w.coef + np.random.default_rng(seed + 20_000 + r).normal(0, noise, 5000)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ConvergenceWarning)
-            for name, pipe in models().items():
+            for name, pipe in models(use_enet).items():
                 pipe.fit(w.X, w.y)
                 mse = float(np.mean((pipe.predict(fresh.X) - fresh_y) ** 2))
                 sums[name]["test_error"].append(mse / noise**2)
@@ -85,10 +109,23 @@ def experiment(kind: str, repeats: int = 30, n: int = 100, p: int = 50, noise: f
                     chosen = np.abs(original_scale_coef(pipe)) > 0
                     truth = w.coef != 0
                     found.append(float((chosen & truth).sum() / max(truth.sum(), 1)))
+                    if kind == "correlated":
+                        grid = chosen.reshape(-1, GROUP)[:5]  # the five groups that hold a real feature
+                        real, copies = grid[:, 0], grid[:, 1:]
+                        group_found.append(float(grid.any(axis=1).mean()))
+                        clean.append(float((real & ~copies.any(axis=1)).mean()))
+                        decoys_kept.append(float(copies.sum()))
+                    else:
+                        clean.append(float(chosen[:5].mean()))
+                        decoys_kept.append(float(chosen[5 : 5 + 4 * 5].sum()))  # 20 noise columns, the same number as the copies above
                     wrong.append(float((chosen & ~truth).sum()))
                     zeros_kept.append(float((~chosen).sum()))
     out = {m: {k: float(np.mean(v)) for k, v in d.items()} for m, d in sums.items()}
     out["lasso"].update(true_features_found=float(np.mean(found)), false_features_kept=float(np.mean(wrong)), coefficients_zeroed=float(np.mean(zeros_kept)))
+    out["lasso"]["clean_selection"] = float(np.mean(clean))  # the real column chosen with none of its copies chosen alongside
+    out["lasso"]["copies_kept_of_20"] = float(np.mean(decoys_kept))
+    if group_found:
+        out["lasso"]["right_group_found"] = float(np.mean(group_found))
     return out
 
 
@@ -151,14 +188,16 @@ def path_figure(path: str, seed: int = 0) -> None:
 
 def summary() -> str:
     lines = []
-    for kind in ("sparse", "dense"):
+    for kind in ("sparse", "dense", "correlated"):
         r = experiment(kind)
         lines.append(f"\n{kind} truth (100 rows, 50 features, 30 fresh datasets): test error as a multiple of noise variance, coefficient error")
-        for name in ("ols", "ridge", "lasso"):
+        for name in [m for m in ("ols", "ridge", "lasso", "elastic_net") if m in r]:
             lines.append(f"  {name:<6}{r[name]['test_error']:>8.3f}{r[name]['coef_error']:>10.2f}")
         la = r["lasso"]
         if kind == "sparse":
-            lines.append(f"  lasso found {la['true_features_found']:.0%} of the 5 real features, kept {la['false_features_kept']:.1f} of 45 noise features, zeroed {la['coefficients_zeroed']:.1f} of 50")
+            lines.append(f"  lasso found {la['true_features_found']:.0%} of the 5 real features, kept {la['false_features_kept']:.1f} of 45 noise features ({la['copies_kept_of_20']:.1f} of the first 20), zeroed {la['coefficients_zeroed']:.1f} of 50")
+        elif kind == "correlated":
+            lines.append(f"  lasso: right group found {la['right_group_found']:.0%}, real column picked {la['true_features_found']:.0%}, but picked cleanly (no copy alongside) only {la['clean_selection']:.0%}; kept {la['copies_kept_of_20']:.1f} of the 20 copies (independent noise columns: see sparse)")
         else:
             lines.append(f"  lasso zeroed {la['coefficients_zeroed']:.1f} of 50 coefficients although every one matters")
     lines.append("\ndiabetes (real, 442 rows): mean squared error " + ", ".join(f"{k} {v:.0f}" for k, v in real_data().items()))

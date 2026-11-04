@@ -10,6 +10,11 @@ def sparse():
 
 
 @pytest.fixture(scope="module")
+def correlated():
+    return rg.experiment("correlated", repeats=12)
+
+
+@pytest.fixture(scope="module")
 def dense():
     return rg.experiment("dense", repeats=12)
 
@@ -87,3 +92,24 @@ def test_path_figure_is_written(tmp_path):
 def test_summary_covers_both_worlds_and_the_real_data():
     text = rg.summary()
     assert "sparse truth" in text and "dense truth" in text and "diabetes" in text and "scale trap" in text
+
+
+def test_correlated_world_has_groups_of_near_copies():
+    w = rg.make_world("correlated")
+    assert np.count_nonzero(w.coef) == 5 and np.flatnonzero(w.coef).tolist() == [0, 5, 10, 15, 20]
+    within = np.corrcoef(w.X[:, :5].T)[np.triu_indices(5, 1)].mean()
+    across = np.corrcoef(w.X[:, [0, 5, 10, 15, 20]].T)[np.triu_indices(5, 1)].mean()
+    assert 0.8 < within < 0.97 and abs(across) < 0.25
+
+
+def test_with_correlated_features_lasso_still_predicts_well_but_selects_messily(correlated, sparse):
+    la = correlated["lasso"]
+    assert la["test_error"] < correlated["ridge"]["test_error"] < correlated["ols"]["test_error"]  # prediction is fine
+    assert la["right_group_found"] > 0.95  # it finds where the signal is...
+    assert la["clean_selection"] < 0.5  # ...but rarely isolates the real column from its copies
+    assert sparse["lasso"]["clean_selection"] > 0.95  # independent features: every real feature picked
+
+
+def test_elastic_net_is_reported_for_the_correlated_world_only(correlated, sparse):
+    assert "elastic_net" in correlated and "elastic_net" not in sparse
+    assert correlated["elastic_net"]["test_error"] < correlated["ridge"]["test_error"]
