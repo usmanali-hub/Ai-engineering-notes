@@ -4,26 +4,38 @@ Filter (ANOVA F-test, mutual information), wrapper (recursive feature eliminatio
 importance) selection, all run *inside* the cross-validation pipeline so the selector only sees training folds.
 `selection_lab.py` checks them on synthetic data where the true columns are known and on a real dataset where they are not.
 
-## Synthetic data (mean over five datasets)
+## Synthetic data (mean over ten datasets)
 
 300 rows, 100 columns: columns 0-4 carry the signal, 5-9 are redundant mixtures of them, 90 are pure noise. Each
-method chooses 10 columns; the classifier is logistic regression; ROC-AUC from 5-fold CV repeated 3 times.
+method chooses 10 columns; the classifier is logistic regression; ROC-AUC from 5-fold CV repeated 3 times, on ten
+independently drawn datasets.
 
 | method | ROC-AUC | informative found (of 5) | redundant found (of 5) | noise picked (of 10) | stability | beat all columns |
 |---|---|---|---|---|---|---|
-| all 100 columns | 0.820 | - | - | - | - | - |
-| ANOVA F-test | 0.904 | 3.0 | 3.8 | 3.2 | 0.51 | 5 of 5 |
-| mutual information | 0.909 | 2.4 | 4.4 | 3.2 | 0.30 | 5 of 5 |
-| RFE (logistic) | 0.895 | 3.2 | 2.4 | 4.4 | 0.36 | 5 of 5 |
-| lasso | 0.894 | 3.2 | 1.4 | 5.4 | 0.33 | 5 of 5 |
-| random forest importance | 0.916 | 4.4 | 5.0 | 0.6 | 0.63 | 5 of 5 |
+| all 100 columns | 0.804 | - | - | - | - | - |
+| ANOVA F-test | 0.875 | 2.9 | 3.8 | 3.3 | 0.51 | 10 of 10 |
+| mutual information | 0.876 | 2.5 | 3.8 | 3.7 | 0.28 | 9 of 10 |
+| RFE (logistic) | 0.872 | 3.4 | 2.5 | 4.1 | 0.36 | 10 of 10 |
+| lasso | 0.868 | 3.0 | 1.4 | 5.6 | 0.32 | 10 of 10 |
+| random forest importance | 0.890 | 4.4 | 4.8 | 0.8 | 0.61 | 10 of 10 |
 
-- **With 100 columns and 300 rows, any selection beats keeping everything** (0.82 to 0.89-0.92), in every dataset.
-- **The forest importance picks found the most true columns and the least noise**, at about 3 seconds per dataset
-  against 0.1 seconds for ANOVA. The spread between selectors (0.894 to 0.916) is about the size of the spread
-  between datasets (0.014 to 0.020), so their order is not established; the gap to using every column is.
+AUC varies a lot between datasets (sd 0.06 to 0.09), so methods are compared on the *same* dataset. Difference from
+ANOVA, paired over the ten datasets:
+
+| method | mean AUC difference | standard error | higher than ANOVA on |
+|---|---|---|---|
+| mutual information | +0.001 | 0.004 | 7 of 10 |
+| RFE (logistic) | -0.003 | 0.008 | 2 of 10 |
+| lasso | -0.006 | 0.008 | 2 of 10 |
+| random forest importance | **+0.015** | 0.005 | **10 of 10** |
+
+- **With 100 columns and 300 rows, almost any selection beats keeping everything** (0.80 to 0.87-0.89): 10 of 10
+  datasets for four methods, 9 of 10 for mutual information.
+- **Forest importance is the only method clearly ahead of the others**: +0.015 over ANOVA, higher in every dataset, and
+  it found the most true columns while picking the least noise, at about 3.6 seconds per dataset against 0.13 for ANOVA.
+  ANOVA, mutual information, RFE and lasso are not separated from each other (differences within about two standard errors).
 - **Stability is poor.** Stability is the mean Jaccard similarity of the chosen set across bootstrap resamples (1 means
-  identical): 0.30 to 0.63, so on 300 rows the exact columns chosen change a lot with the sample. A selected list
+  identical): 0.28 to 0.61, so on 300 rows the exact columns chosen change a lot with the sample. A selected list
   should not be read as "these are the important features".
 
 ## Real data: breast cancer, 30 columns
@@ -44,7 +56,7 @@ extra columns. Selection pays off when columns greatly outnumber rows, not by de
 
 - The synthetic data has independent noise columns and a known linear signal; real noise is correlated.
 - One classifier, one set size (10) for the synthetic data, default settings for each selector.
-- Five datasets show a consistent direction but do not rank the selectors against each other.
+- Ten datasets separate forest importance from the rest but not the other four from each other; a different number of selected columns could change the ranking.
 - Stability is measured on 300 rows; with more data it would rise.
 
 ## Run

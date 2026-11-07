@@ -34,7 +34,7 @@ INFORMATIVE = range(5)
 REDUNDANT = range(5, 10)
 
 
-SEEDS = (3, 4, 5, 6, 7)
+SEEDS = tuple(range(3, 13))  # ten independently drawn datasets
 
 
 def synthetic(seed: int = SEED) -> tuple[NDArray[np.float64], NDArray[np.int_]]:
@@ -122,7 +122,19 @@ def repeated_synthetic(k: int = 10, seeds: tuple[int, ...] = SEEDS) -> pd.DataFr
     mean["auc_sd_over_datasets"] = auc.std(ddof=1).loc[list(METHODS)]
     mean["beats_all_columns"] = [int((auc[m] > auc["none"]).sum()) if m != "none" else 0 for m in METHODS]
     mean["datasets"] = len(seeds)
+    mean.attrs["auc_by_dataset"] = auc
     return mean
+
+
+def paired_vs(auc: pd.DataFrame, reference: str = "anova") -> pd.DataFrame:
+    """Per method, the AUC difference from ``reference`` on the same dataset: mean, standard error and how often it was higher."""
+    out = []
+    for m in METHODS:
+        if m in (reference, "none"):
+            continue
+        d = auc[m] - auc[reference]
+        out.append({"method": m, "mean_diff": d.mean(), "se": d.std(ddof=1) / np.sqrt(len(d)), "wins": int((d > 0).sum()), "datasets": len(d)})
+    return pd.DataFrame(out).set_index("method")
 
 
 def compare_real(ks: tuple[int, ...] = (3, 5, 10)) -> pd.DataFrame:
@@ -138,7 +150,10 @@ def compare_real(ks: tuple[int, ...] = (3, 5, 10)) -> pd.DataFrame:
 def main() -> None:
     pd.set_option("display.width", 160)
     print(f"Synthetic: 5 informative, 5 redundant, 90 noise columns; choose 10; 300 rows; mean over {len(SEEDS)} datasets")
-    print(repeated_synthetic().round(3).to_string())
+    table = repeated_synthetic()
+    print(table.round(3).to_string())
+    print(f"\nPaired against ANOVA on the same {len(SEEDS)} datasets (AUC difference):")
+    print(paired_vs(table.attrs["auc_by_dataset"]).round(4).to_string())
     print("\nBreast cancer (30 real columns): CV ROC-AUC by number of selected columns")
     print(compare_real().round(3).to_string())
 

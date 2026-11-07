@@ -68,3 +68,24 @@ def test_stability_is_a_similarity_between_zero_and_one():
 def test_real_data_does_not_need_selection():
     t = lab.compare_real(ks=(5,))
     assert t.loc["none (all 30)"].iloc[0] >= t[5].drop("none (all 30)").max() - 0.01
+
+
+def test_paired_comparison_uses_the_same_datasets_and_signs_correctly():
+    import pandas as pd
+
+    auc = pd.DataFrame(
+        {
+            "none": [0.8, 0.8, 0.8, 0.8],
+            "anova": [0.90, 0.91, 0.89, 0.90],
+            "mutual_info": [0.91, 0.90, 0.90, 0.91],
+            "rfe": [0.88, 0.89, 0.88, 0.88],
+            "lasso": [0.90, 0.91, 0.89, 0.90],
+            "forest": [0.92, 0.93, 0.91, 0.92],
+        }
+    )
+    p = lab.paired_vs(auc)
+    assert "anova" not in p.index and "none" not in p.index
+    assert p.loc["forest", "wins"] == 4 and p.loc["rfe", "wins"] == 0
+    assert p.loc["forest", "mean_diff"] == pytest.approx(0.02)
+    assert p.loc["lasso", "wins"] == 0 and p.loc["lasso", "mean_diff"] == pytest.approx(0.0)
+    assert (p["datasets"] == 4).all()
