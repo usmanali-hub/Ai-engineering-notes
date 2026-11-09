@@ -1,8 +1,7 @@
+import imbalance_lab as lab
 import numpy as np
 import pytest
 from sklearn.metrics import f1_score
-
-import imbalance_lab as lab
 
 
 @pytest.fixture(scope="module")
