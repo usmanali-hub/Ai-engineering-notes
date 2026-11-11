@@ -17,9 +17,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from sklearn.cluster import KMeans
+from sklearn.cluster import DBSCAN, KMeans
 from sklearn.datasets import load_iris, load_wine, make_blobs, make_moons
 from sklearn.metrics import adjusted_rand_score, silhouette_score
+from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 
 SEED = 5
@@ -86,6 +87,43 @@ def stability(X: NDArray[np.float64], k: int, seeds: int = 10) -> dict[str, floa
     return {"min_pairwise_ari": float(min(aris)), "mean_pairwise_ari": float(np.mean(aris)), "inertia_spread": float((inertia.max() - inertia.min()) / inertia.min())}
 
 
+EPS_GRID = tuple(round(float(e), 2) for e in np.arange(0.1, 1.61, 0.1))
+MAX_NOISE = 0.2
+
+
+def dbscan_eps_sweep(X: NDArray[np.float64], y: NDArray[np.int_], min_samples: int = 5) -> pd.DataFrame:
+    """DBSCAN over a grid of radii (on standardised features): clusters found, share labelled noise, silhouette over
+    the non-noise points, and the ARI against the truth. Noise points count as one extra group in the ARI."""
+    Z = StandardScaler().fit_transform(X)
+    rows = []
+    for eps in EPS_GRID:
+        labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(Z)
+        keep = labels >= 0
+        n_clusters = len(set(labels[keep]))
+        sil = float(silhouette_score(Z[keep], labels[keep])) if n_clusters >= 2 and keep.sum() > n_clusters else float("nan")
+        rows.append({"eps": eps, "clusters": n_clusters, "noise": float((~keep).mean()), "silhouette": sil, "ari": float(adjusted_rand_score(y, labels))})
+    return pd.DataFrame(rows).set_index("eps")
+
+
+def dbscan_choice(table: pd.DataFrame) -> float:
+    """Pick the radius without looking at the labels: the best silhouette among radii that find at least two clusters
+    and label less than ``MAX_NOISE`` of the points as noise."""
+    ok = table[(table["clusters"] >= 2) & (table["noise"] < MAX_NOISE)]
+    return float(ok["silhouette"].idxmax()) if not ok.empty else float("nan")
+
+
+def compare_methods(X: NDArray[np.float64], y: NDArray[np.int_], k: int) -> dict[str, float]:
+    """ARI at the true number of groups for k-means and a Gaussian mixture, and for DBSCAN at the radius chosen without
+    labels (plus the best and worst ARI over the radius grid, to show how much depends on that one parameter)."""
+    Z = StandardScaler().fit_transform(X)
+    kmeans = adjusted_rand_score(y, fit(Z, k).labels_)
+    gmm = adjusted_rand_score(y, GaussianMixture(k, covariance_type="full", n_init=5, random_state=SEED).fit_predict(Z))
+    table = dbscan_eps_sweep(X, y)
+    eps = dbscan_choice(table)
+    chosen = float(table.loc[eps, "ari"]) if not np.isnan(eps) else float("nan")
+    return {"kmeans": float(kmeans), "gmm": float(gmm), "dbscan_chosen": chosen, "dbscan_best": float(table["ari"].max()), "dbscan_worst": float(table["ari"].min())}
+
+
 @dataclass(frozen=True)
 class Summary:
     name: str
@@ -112,6 +150,8 @@ def main() -> None:
     print(pd.DataFrame(rows).set_index("name").round(3).to_string())
     X, y, k = datasets()["wine (3 cultivars)"]
     print("\nScaling on wine at the true k:", {a: round(b, 3) for a, b in scaling_effect(X, y, k).items()})
+    print("\nOther methods, ARI at the true number of groups (all standardised; DBSCAN radius chosen without labels)")
+    print(pd.DataFrame({name: compare_methods(X, y, k) for name, (X, y, k) in datasets().items()}).T.round(3).to_string())
     print("\nStability over 10 single-start runs (k = true k)")
     for name, (X, _, k) in datasets().items():
         s = stability(StandardScaler().fit_transform(X) if name.startswith(("iris", "wine")) else X, k)
