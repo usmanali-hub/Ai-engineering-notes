@@ -3,7 +3,7 @@
 Tunes a gradient boosting model (four hyperparameters: learning rate, leaf count, L2 penalty, minimum leaf size) on
 three small datasets (breast cancer, wine, a noisy synthetic problem) with three methods, each given 8, 16 or 32
 trials. A trial is a 3-fold cross-validated accuracy. The best configuration is then refitted on the whole training
-part and scored on a test part that no search saw. Four seeds (each changes the split and the random draws).
+part and scored on a test part that no search saw. Twelve seeds (each changes the split and the random draws).
 
 * **grid**: evenly spaced values per hyperparameter (log-spaced for the ranges spanning orders of magnitude), a lattice
   with exactly the budget's number of points (2x2x2, 2x2x2x2, 4x2x2x2);
@@ -11,35 +11,39 @@ part and scored on a test part that no search saw. Four seeds (each changes the 
 * **tpe**: Optuna's Tree-structured Parzen Estimator.
 
 ```
-python search_lab.py      # about 5 minutes on 2 cores
+python search_lab.py      # about 15 to 20 minutes on 2 cores
 pytest
 ```
 
-## Results (mean over 3 datasets x 4 seeds = 12 runs per cell)
+## Results (mean over 3 datasets x 12 seeds = 36 runs per cell)
 
 | budget | method | best CV accuracy | test accuracy | test minus random (paired) |
 |---|---|---|---|---|
-| 8 | grid | 0.9090 | 0.9226 | +0.007 ± 0.007 |
-| 8 | random | 0.9100 | 0.9153 | 0 |
-| 8 | tpe | 0.9096 | 0.9242 | +0.009 ± 0.009 |
-| 16 | grid | 0.9104 | 0.9166 | +0.007 ± 0.008 |
-| 16 | random | 0.9130 | 0.9099 | 0 |
-| 16 | tpe | 0.9146 | 0.9230 | +0.013 ± 0.009 |
-| 32 | grid | 0.9123 | 0.9145 | +0.006 ± 0.010 |
-| 32 | random | 0.9154 | 0.9089 | 0 |
-| 32 | tpe | 0.9178 | 0.9245 | +0.016 ± 0.009 |
+| 8 | grid | 0.9083 | 0.9248 | +0.007 ± 0.004 |
+| 8 | random | 0.9112 | 0.9174 | 0 |
+| 8 | tpe | 0.9099 | 0.9221 | +0.005 ± 0.004 |
+| 16 | grid | 0.9117 | 0.9213 | +0.002 ± 0.003 |
+| 16 | random | 0.9141 | 0.9189 | 0 |
+| 16 | tpe | 0.9144 | 0.9248 | +0.006 ± 0.003 |
+| 32 | grid | 0.9135 | 0.9210 | +0.001 ± 0.004 |
+| 32 | random | 0.9156 | 0.9200 | 0 |
+| 32 | tpe | 0.9175 | 0.9269 | +0.007 ± 0.004 |
 
-(± is the standard error of the paired difference over the 12 runs.)
+(± is the standard error of the paired difference over the 36 runs.)
+
+An earlier version of this lab used 4 seeds and showed TPE ahead of random by +0.016 at a budget of 32. With 12 seeds
+that gap is +0.007: the larger number was mostly noise, which is the reason the lab now uses more seeds.
 
 ## What to take from it
 
 * **At these budgets the three methods are close.** The best cross-validated score rises slowly with budget for all of
-  them (about 0.910 at 8 trials to 0.912-0.918 at 32), and TPE is highest at 16 and 32 trials. The grid is lowest in
-  best-CV score at 16 and 32, as expected when only a few values per axis can be tried.
-* **Test-set differences are within noise.** The paired test difference against random search is at most 0.016 and the
-  standard errors are 0.007 to 0.010, so none of it is distinguishable from zero with 12 runs. The ordering of test
-  scores (TPE first at every budget) is suggestive, not established.
-* **The "optimism" column here is negative or small** (test accuracy is often above the best CV score) because 3-fold
+  them (0.908-0.912 at 8 trials to 0.914-0.918 at 32). TPE has the highest best-CV score at 16 and 32 trials and the grid
+  the lowest at every budget, as expected when only a few values per axis can be tried.
+* **Test-set differences are small and mostly not distinguishable from zero.** The largest paired difference against random
+  search is +0.007, with standard errors of 0.003 to 0.004. TPE's +0.007 at a budget of 32 is about 2 standard errors, but
+  six comparisons were made, so one near 2 is what chance produces; and the grid is ahead of random at a budget of 8 (+0.007)
+  and level at 32, which no one would predict from theory. TPE ahead of random at every budget is suggestive, not established.
+* **The "optimism" column here is negative** (test accuracy is above the best CV score for every method) because 3-fold
   CV trains on two thirds of the training part while the final refit uses all of it. A search is optimistic about the
   score it found, but that effect is smaller than this difference in training size on small data.
 * Grid search wastes trials on hyperparameters that do not matter (it repeats the same learning rate for every
@@ -48,7 +52,7 @@ pytest
 
 ## Limits
 
-* Three small datasets, four seeds, one model family, accuracy only. Four hyperparameters and budgets up to 32 are
+* Three small datasets, twelve seeds, one model family, accuracy only. Four hyperparameters and budgets up to 32 are
   small; the gap between methods usually grows with more hyperparameters and larger budgets.
 * The grid lattices are one particular choice of levels (centred in each range, not at the edges). A grid built around
   known-good values could do better.

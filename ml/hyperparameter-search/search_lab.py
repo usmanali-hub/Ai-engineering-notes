@@ -34,7 +34,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 BUDGETS = (8, 16, 32)
-SEEDS = (0, 1, 2, 3)
+SEEDS = tuple(range(12))
 SPACE: dict[str, tuple[float, float, str]] = {  # name: (low, high, scale)
     "learning_rate": (0.01, 0.3, "log"),
     "max_leaf_nodes": (4, 32, "logint"),
