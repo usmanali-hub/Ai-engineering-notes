@@ -167,6 +167,44 @@ def onnx_load_rejects_non_models() -> bool:
     return not parsed and not EXECUTED
 
 
+def rounding_sensitivity(model: str, relative_noise: float = 2e-7, seed: int = SEED) -> dict[str, float]:
+    """How much scikit-learn's *own* predictions move when the preprocessed features change by float32-rounding-sized noise.
+
+    This isolates where the forest disagreement comes from. ONNX's preprocessing differs from scikit-learn's by about
+    1e-7 per feature (float32 arithmetic). If scikit-learn's forest moves as much under that much noise, the gap is
+    the forest's sensitivity near split thresholds, not a defect in the ONNX trees.
+    """
+    df, y = make_data()
+    pipe = build(model).fit(df.iloc[:2000], y[:2000])
+    X = pipe.named_steps["prep"].transform(df.iloc[2000:]).astype(np.float32)
+    rng = np.random.default_rng(seed)
+    noisy = (X * (1 + relative_noise * rng.uniform(-1, 1, X.shape))).astype(np.float32)
+    est = pipe.named_steps["model"]
+    d = np.abs(est.predict_proba(X)[:, 1] - est.predict_proba(noisy)[:, 1])
+    return {"max_change": float(d.max()), "share_rows_over_1e3": float((d > 1e-3).mean())}
+
+
+def tree_only_agreement(seed: int = SEED) -> float:
+    """Max probability difference between the forest and its ONNX conversion when both get the same float32 inputs."""
+    from skl2onnx.common.data_types import FloatTensorType as F
+
+    df, y = make_data()
+    pipe = build("forest").fit(df.iloc[:2000], y[:2000])
+    X = pipe.named_steps["prep"].transform(df.iloc[2000:]).astype(np.float32)
+    est = pipe.named_steps["model"]
+    m = convert_sklearn(est, initial_types=[("x", F([None, X.shape[1]]))], options={id(est): {"zipmap": False}}, target_opset=17)
+    sess = ort.InferenceSession(bytes(m.SerializeToString()), providers=["CPUExecutionProvider"])
+    _, proba = sess.run(None, {"x": X})
+    return float(np.abs(np.asarray(proba)[:, 1] - est.predict_proba(X)[:, 1]).max())
+
+
+def timing_range(model: str, workdir: Path, runs: int = 5) -> dict[str, tuple[float, float]]:
+    """Min and max over independent full measurements, for the timing columns only."""
+    rows = [compare(model, workdir) for _ in range(runs)]
+    fields = ("load_ms_joblib", "load_ms_onnx", "one_row_ms_joblib", "one_row_ms_onnx", "batch_ms_joblib", "batch_ms_onnx")
+    return {f: (min(getattr(r, f) for r in rows), max(getattr(r, f) for r in rows)) for f in fields}
+
+
 def stringify(rows: list[Row]) -> str:
     buf = io.StringIO()
     pd.DataFrame([r.__dict__ for r in rows]).round(4).to_string(buf, index=False)

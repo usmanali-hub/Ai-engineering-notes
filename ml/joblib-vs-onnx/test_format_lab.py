@@ -57,3 +57,18 @@ def test_an_unseen_category_is_ignored_by_both_formats(tmp_path):
 def test_loading_a_pickle_runs_code_and_the_onnx_loader_does_not():
     assert lab.pickle_load_runs_code() is True
     assert lab.onnx_load_rejects_non_models() is True
+
+
+def test_forest_converted_alone_matches_scikit_learn_when_given_identical_inputs():
+    assert lab.tree_only_agreement() < 1e-5
+
+
+def test_the_forest_gap_is_scikit_learns_own_sensitivity_to_float32_sized_noise():
+    forest, logistic = lab.rounding_sensitivity("forest"), lab.rounding_sensitivity("logistic")
+    assert forest["share_rows_over_1e3"] > 0.05 and forest["max_change"] > 0.005
+    assert logistic["max_change"] < 1e-5 and logistic["share_rows_over_1e3"] == 0
+
+
+def test_timing_range_is_ordered(tmp_path):
+    r = lab.timing_range("logistic", tmp_path, runs=2)
+    assert all(0 < lo <= hi for lo, hi in r.values())

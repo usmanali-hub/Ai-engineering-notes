@@ -20,28 +20,35 @@ Needs `skl2onnx` and `onnxruntime` (in `requirements-dev.txt`).
 
 * **ONNX files are smaller** here (about a third of the size for the logistic model, half for the forest).
 * **The logistic model converts exactly** to float32 precision.
-* **The forest does not.** The probabilities differ by up to 0.026 and about a fifth of the rows differ by more than 0.001,
-  while 99.6% of the 0.5-threshold decisions agree. ONNX compares in float32, so a feature value very close to a split
-  point can fall on the other side and land in a different leaf. That is small in aggregate and real per row: if a
-  downstream system uses the probability as a score, or a cutoff close to where many rows sit, check agreement on your
-  own data before switching format.
+* **The forest does not, and the cause is measured, not guessed.** The probabilities differ by up to 0.026, and about a fifth
+  of the rows differ by more than 0.001, while 99.6% of the 0.5-threshold decisions agree. Three checks locate it:
+  * the converted forest alone, given exactly the same float32 inputs as scikit-learn, agrees to 3e-7, so the ONNX trees
+    are right;
+  * the ONNX preprocessing differs from scikit-learn's by about 3e-7 per feature (float32 arithmetic);
+  * scikit-learn's *own* forest, given float32-rounding-sized noise (relative 2e-7) on its inputs, moves by up to 0.024 and
+    changes 17% of rows by more than 0.001, which is the same size as the ONNX gap. A logistic regression moves by 1e-7.
+  A deep forest has many thresholds, a continuous feature lands near one of them in some tree about one row in five,
+  and each such flip moves the average a little. So the gap is the forest's sensitivity to last-digit differences, not a
+  conversion defect, and no converter setting removes it: double-precision inputs and the newer ML opset were tried and left
+  it at 17% of rows over 0.001. Check agreement on your own data before switching format, and compare decisions, not
+  probabilities, if exactness matters.
 
-## Speed (machine dependent: read the ratios, not the milliseconds)
-
-Medians over repeated calls on a 2-core cloud container:
+## Speed (min to max over 5 independent measurements, 2-core cloud container)
 
 | | scikit-learn via joblib | ONNX Runtime |
 |---|---|---|
-| predict one row (logistic) | about 3 ms | about 0.1 ms |
-| predict one row (forest) | about 8 ms | about 0.1 ms |
-| predict 1,000 rows (logistic) | about 4 ms | about 0.5 ms |
-| predict 1,000 rows (forest) | about 16 ms | about 4-16 ms (varied run to run) |
-| load the file (forest) | about 16-19 ms | about 21-50 ms |
+| predict one row (logistic) | 2.8-3.9 ms | 0.07-0.09 ms |
+| predict one row (forest) | 7.6-10.4 ms | 0.08-0.14 ms |
+| predict 1,000 rows (logistic) | 3.0-3.3 ms | 0.37-0.42 ms |
+| predict 1,000 rows (forest) | 16.4-20.7 ms | 4.5-5.0 ms |
+| load the file (logistic) | 0.71-0.78 ms | 0.68-0.81 ms |
+| load the file (forest) | 16.7-23.3 ms | 16.8-20.8 ms |
 
-* **Single-row latency is where ONNX wins clearly** (a factor of 30 or more here), because scikit-learn's per-call overhead
+* **Single-row latency is where ONNX wins most** (30 to 100 times here), because scikit-learn's per-call overhead
   dominates for one row.
-* **Large batches narrow the gap** for the forest, and loading was slower for ONNX in these runs. These timings varied by
-  a factor of two between runs, so treat them as indicative only.
+* **Batches of 1,000 are 8 times faster for the logistic model and 4 times for the forest.** Loading takes about the same.
+* An earlier single run showed a wide spread because other jobs were using the same cores; with nothing else running the
+  ranges above are narrow. They are still one machine: use the ratios, not the milliseconds.
 
 ## Safety: loading a pickle runs code
 
@@ -61,7 +68,7 @@ where a model came from, since a malicious graph can still be wrong on purpose.
 
 ## Limits
 
-* Two models, one synthetic dataset, one machine. The agreement gap in particular depends on the model and the data.
+* Two models, one synthetic dataset, one machine. The size of the forest agreement gap depends on the model and the data.
 * Only models the converter supports can be exported; custom transformers need extra work.
 * The conversion fixed the ONNX opset at 17 and ZipMap off (plain probability array); other settings behave differently.
 * The safety demonstration is a toy payload; it shows the mechanism, not how much damage is likely.
