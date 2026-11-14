@@ -7,3 +7,5 @@ scikit-learn>=1.4
 imbalanced-learn>=0.12
 lightgbm>=4.0
 optuna>=3.5
+skl2onnx>=1.17
+onnxruntime>=1.18
