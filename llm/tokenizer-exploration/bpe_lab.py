@@ -11,12 +11,13 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
+from itertools import pairwise
 
 
 def _pair_counts(words: Counter[tuple[int, ...]]) -> Counter[tuple[int, int]]:
     counts: Counter[tuple[int, int]] = Counter()
     for word, freq in words.items():
-        for a, b in zip(word, word[1:], strict=False):
+        for a, b in pairwise(word):
             counts[(a, b)] += freq
     return counts
 
@@ -57,7 +58,7 @@ class BPE:
         for chunk in pre_split(text):
             word = tuple(chunk.encode("utf-8"))
             while len(word) > 1:
-                candidates = [(rank[p], p) for p in zip(word, word[1:], strict=False) if p in rank]
+                candidates = [(rank[p], p) for p in pairwise(word) if p in rank]
                 if not candidates:
                     break
                 r, pair = min(candidates)

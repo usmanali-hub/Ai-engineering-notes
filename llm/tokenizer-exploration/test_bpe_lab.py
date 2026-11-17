@@ -1,13 +1,21 @@
 import random
 
 import pytest
+
 from bpe_lab import BPE, pre_split, profile, train
 
 TEXT = "the cat sat on the mat. the cat ate the rat. " * 20
 
 
 def test_pre_split_is_lossless_on_mixed_text():
-    samples = ["Hello, world!  two  spaces\nnew line\t tab", "snake_case_name 12345 ... ?!", "زبان 🚀 语言 end", "", " ", "a  b"]
+    samples = [
+        "Hello, world!  two  spaces\nnew line\t tab",
+        "snake_case_name 12345 ... ?!",
+        "زبان 🚀 语言 end",
+        "",
+        " ",
+        "a  b",
+    ]
     for s in samples:
         assert "".join(pre_split(s)) == s
 
