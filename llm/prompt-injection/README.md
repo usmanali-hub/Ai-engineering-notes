@@ -20,3 +20,13 @@ pytest
 * **Strict Tag Encapsulation:** Isolating untrusted data inside explicit `<user_document>` boundaries.
 * **Meta-Instruction Scaffolding:** Explicit system guidance instructing the model to treat content inside document tags strictly as data, never as executable commands.
 * **Canary & Output Validation:** Automated checking for marker tokens before releasing outputs downstream.
+
+## What this is not
+
+`mock_model_generate` is not a model: in defended mode it is hand-coded to withstand every case in `ATTACK_CASES`
+(it checks for the one hardcoded leakage phrase and otherwise always reports the document as safely parsed), so
+`test_defended_withstands_attacks` currently proves the mock behaves the way it was written, not that any prompt
+defense actually holds against a real model. The naive-mode test is the useful half: it shows the *naive* string
+concatenation is compromised by every case in `ATTACK_CASES`, which is a real (if simple) property of that code.
+Treating the defended-mode result as a verified defense would be the mistake; it is a labelled case set and a
+mock scaffold to evaluate a real model against, not a finished evaluation.

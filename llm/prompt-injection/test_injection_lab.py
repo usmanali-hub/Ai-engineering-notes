@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
 from injection_lab import (
     ATTACK_CASES,
-    AttackType,
     build_defended_prompt,
     evaluate_attack,
     mock_model_generate,
@@ -38,7 +36,9 @@ def test_naive_fails_attacks(case):
     naive_prompt = f"System: Process this.\nUser: {case.payload}"
     resp = mock_model_generate(naive_prompt, defend=False)
     # Naive pipeline is expected to be compromised
-    assert not evaluate_attack(case, resp), f"Expected naive pipeline to fail on {case.case_id}"
+    assert not evaluate_attack(case, resp), (
+        f"Expected naive pipeline to fail on {case.case_id}"
+    )
 
 
 @pytest.mark.parametrize("case", ATTACK_CASES, ids=lambda c: c.case_id)

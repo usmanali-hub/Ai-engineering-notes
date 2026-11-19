@@ -19,7 +19,9 @@ def run_benchmark():
     defended_passed = 0
 
     for case in ATTACK_CASES:
-        print(f"\n[Case {case.case_id}] {case.attack_type.value.upper()}: {case.description}")
+        print(
+            f"\n[Case {case.case_id}] {case.attack_type.value.upper()}: {case.description}"
+        )
         print(f"Payload: {case.payload!r}")
 
         # 1. Naive run
@@ -36,14 +38,20 @@ def run_benchmark():
         if defended_ok:
             defended_passed += 1
 
-        print(f"  Naive Result:    {'PASSED' if naive_ok else 'COMPROMISED (Defeated)'}")
+        print(
+            f"  Naive Result:    {'PASSED' if naive_ok else 'COMPROMISED (Defeated)'}"
+        )
         print(f"  Defended Result: {'PASSED (Held)' if defended_ok else 'COMPROMISED'}")
 
     total = len(ATTACK_CASES)
     print("\n" + "=" * 70)
-    print(f"SUMMARY:")
-    print(f"  Naive Defense Pass Rate:    {naive_passed}/{total} ({naive_passed/total:.1%})")
-    print(f"  Defended System Pass Rate: {defended_passed}/{total} ({defended_passed/total:.1%})")
+    print("SUMMARY:")
+    print(
+        f"  Naive Defense Pass Rate:    {naive_passed}/{total} ({naive_passed / total:.1%})"
+    )
+    print(
+        f"  Defended System Pass Rate: {defended_passed}/{total} ({defended_passed / total:.1%})"
+    )
     print("=" * 70)
 
 
