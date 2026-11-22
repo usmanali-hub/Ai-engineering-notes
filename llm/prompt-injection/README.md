@@ -21,12 +21,23 @@ pytest
 * **Meta-Instruction Scaffolding:** Explicit system guidance instructing the model to treat content inside document tags strictly as data, never as executable commands.
 * **Canary & Output Validation:** Automated checking for marker tokens before releasing outputs downstream.
 
-## What this is not
+## What this is, now that it is fixed
 
-`mock_model_generate` is not a model: in defended mode it is hand-coded to withstand every case in `ATTACK_CASES`
-(it checks for the one hardcoded leakage phrase and otherwise always reports the document as safely parsed), so
-`test_defended_withstands_attacks` currently proves the mock behaves the way it was written, not that any prompt
-defense actually holds against a real model. The naive-mode test is the useful half: it shows the *naive* string
-concatenation is compromised by every case in `ATTACK_CASES`, which is a real (if simple) property of that code.
-Treating the defended-mode result as a verified defense would be the mistake; it is a labelled case set and a
-mock scaffold to evaluate a real model against, not a finished evaluation.
+Both `naive_generate` and `defended_generate` are now single, general rules applied the same way to every case,
+not a lookup table keyed by `case_id` (an earlier version of this file hard-coded the defended reply per attack,
+which meant the "defense" test proved only that the mock behaved as written). The rules:
+
+* **naive**: echo the entire prompt back verbatim — a stand-in for a model with no defenses, where anything written
+  into the prompt (including an attacker's own text) reaches the output unfiltered.
+* **defended**: never echo a single character of `<user_document>` content; report only its length. This holds
+  against every case here by construction, because every attack in this set depends on its own text (or a secret
+  the model saw) appearing in the output, and this rule makes that impossible regardless of what the document says.
+
+## What this still is not
+
+This is *not* evidence that any real model, prompted this way, would resist these attacks: `defended_generate`
+is a content-blind rule, not a language model, and a real model deciding what to echo is exactly the part this
+does not test. The rule is also uselessly conservative for actual summarization — it can't echo anything from the
+document, including the parts a user actually wanted summarized — so it demonstrates one real, extreme point on
+the input-isolation spectrum (never pass untrusted text through), not a tuned, deployable defense. Evaluating a
+real defense needs a real model and these cases run against it, which this lab does not have access to.

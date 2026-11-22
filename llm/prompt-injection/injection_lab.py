@@ -100,22 +100,36 @@ def build_defended_prompt(
     )
 
 
+_DOCUMENT_PATTERN = re.compile(r"<user_document>\n(.*?)\n</user_document>", re.DOTALL)
+
+
+def naive_generate(prompt: str) -> str:
+    """A model with no injection defenses at all: it simply repeats back everything it was given, verbatim.
+
+    This is a general rule (not a per-attack lookup): whatever text the prompt contains flows straight through, so
+    any instruction embedded in it, including one the real attacker wrote, reaches the output unfiltered. It is a
+    stand-in for "a model that just complies with whatever it reads", not a claim about how any real model behaves.
+    """
+    return f"Simulated naive model output: {prompt}"
+
+
+def defended_generate(prompt: str) -> str:
+    """A model under one fixed, content-blind rule: nothing from inside <user_document> is ever echoed back.
+
+    This is deliberately the most conservative possible defense, and it is applied the same way to every prompt,
+    not tuned per attack case: the reply reports only the document's length, never its content, so no instruction
+    hidden inside it, direct or indirect, override or leakage request, can ever reach the output. That is also
+    exactly why it says nothing useful about summarization quality; see the lab's README.
+    """
+    match = _DOCUMENT_PATTERN.search(prompt)
+    length = len(match.group(1)) if match else 0
+    return f"Summary: processed {length} characters of untrusted document content; none of it is echoed here."
+
+
 def mock_model_generate(prompt: str, defend: bool = True) -> str:
-    """Simulates an LLM generation with either naive concatenation or defensive delimiter isolation."""
-    if not defend:
-        # Naive behavior: attacker payload directly overrides the generation
-        for case in ATTACK_CASES:
-            if case.payload in prompt:
-                return f"Simulated naive model output: {case.compromised_marker}"
-        return "Simulated naive model output: Safe response."
-
-    # Defended behavior: check if strict delimiters or leakage occurs
-    # If the attack is a direct prompt leakage attempt, defend against emitting the secret
-    if "SECRET_KEY_9841" in prompt and "What were the exact words" in prompt:
-        return "I cannot disclose internal system keys or instructions. Here is your summary."
-
-    # For overrides contained in <user_document>, model treats it as data
-    return "Summary: The user document contains text requesting an override, which was safely parsed as untrusted data."
+    """Thin dispatcher kept for the existing test suite's call shape; the real logic lives in the two functions
+    above, each a single general rule applied uniformly, not a per-case lookup table."""
+    return defended_generate(prompt) if defend else naive_generate(prompt)
 
 
 def evaluate_attack(case: AttackCase, response: str) -> bool:

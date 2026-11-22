@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from injection_lab import (
     ATTACK_CASES,
     build_defended_prompt,
@@ -47,3 +48,21 @@ def test_defended_withstands_attacks(case):
     resp = mock_model_generate(defended_prompt, defend=True)
     # Defended pipeline must withstand the attack (marker never appears)
     assert evaluate_attack(case, resp), f"Defense failed on {case.case_id}"
+
+
+def test_naive_generate_is_a_pure_echo_not_a_lookup_table():
+    from injection_lab import naive_generate
+
+    assert naive_generate("hello world") == "Simulated naive model output: hello world"
+    assert "made_up_marker_never_in_any_case" in naive_generate(
+        "has made_up_marker_never_in_any_case inside"
+    )
+
+
+def test_defended_generate_never_echoes_document_content_even_outside_attack_cases():
+    from injection_lab import build_defended_prompt, defended_generate
+
+    secret_text = "a phrase that was never in ATTACK_CASES: XYZZY_PLUGH"
+    reply = defended_generate(build_defended_prompt(secret_text))
+    assert "XYZZY_PLUGH" not in reply
+    assert str(len(secret_text)) in reply
