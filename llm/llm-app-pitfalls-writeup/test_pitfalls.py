@@ -4,14 +4,20 @@ from pitfalls import PITFALLS
 
 README = (Path(__file__).parent / "README.md").read_text(encoding="utf-8")
 
-# This repo's own root (ai-engineering-notes), the only thing guaranteed to be on disk wherever this test runs,
-# including in this repo's own GitHub Actions checkout, which contains only this repo and no siblings.
+# This repo's own root, the only thing guaranteed to be on disk wherever this test runs, including in this repo's
+# own GitHub Actions checkout, which contains only this repo and no siblings. Resolved by walking up from this file
+# rather than by name, because the checkout directory's name on GitHub ("Ai-engineering-notes") does not match the
+# "ai-engineering-notes/" prefix used in PITFALLS (which follows this repo's lowercase GitHub slug convention) on a
+# case-sensitive filesystem - so in-repo sources are resolved against THIS_REPO after stripping that prefix, never
+# by joining the prefix onto a parent directory and hoping the folder name matches it.
 THIS_REPO = Path(__file__).resolve().parents[2]
 
 # The home directory one level up, which in this sandbox also holds the other repos (llm-playground-evals, ...) as
 # siblings of this one. A source in PITFALLS outside this repo can only be existence-checked here, never in CI,
 # because this repo's own CI checks out only itself - see test_every_cross_repo_pitfall_source_is_well_formed below.
 REPOS_HOME = THIS_REPO.parent
+
+IN_REPO_PREFIX = "ai-engineering-notes/"
 
 
 def test_every_listed_pitfall_is_discussed_in_the_writeup():
@@ -28,8 +34,8 @@ def test_every_in_repo_pitfall_points_at_a_source_file_that_actually_exists():
     missing_files = [
         (name, source)
         for name, source in PITFALLS.items()
-        if source.startswith("ai-engineering-notes/")
-        and not (REPOS_HOME / source).is_file()
+        if source.startswith(IN_REPO_PREFIX)
+        and not (THIS_REPO / source.removeprefix(IN_REPO_PREFIX)).is_file()
     ]
     assert not missing_files, missing_files
 
@@ -44,7 +50,7 @@ def test_every_cross_repo_pitfall_source_is_well_formed():
     cross_repo = [
         (name, source)
         for name, source in PITFALLS.items()
-        if not source.startswith("ai-engineering-notes/")
+        if not source.startswith(IN_REPO_PREFIX)
     ]
     assert cross_repo, "expected at least one cross-repo pitfall source"
     for name, source in cross_repo:
